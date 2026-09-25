@@ -111,7 +111,19 @@ nav.tabs button[aria-selected="true"] { color: var(--text-primary); border-botto
 .badge.ok { background: var(--accent-soft); color: var(--good); }
 .badge.na { background: var(--surface-1); color: var(--text-muted); border: 1px solid var(--border); }
 
-.panel { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; }
+.toolbar {
+  position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0 10px;
+  display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; border-bottom: 1px solid var(--border);
+}
+.toolbar label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.toolbar select { font: inherit; color: var(--text-primary); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; max-width: 100%; }
+.toolbar .legend { margin-top: 0; }
+article.line { margin-top: 26px; }
+.line-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 18px; margin: 0; }
+.line-title .rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--text-primary); color: var(--surface-1); font-size: 13px; }
+.line-title .line-val { font-size: 14px; font-weight: 400; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.line-title .badge { margin-left: 0; }
+.panel { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) { .panel { grid-template-columns: 1fr; } }
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
 
@@ -417,20 +429,47 @@ function niceStep(raw) {
 }
 
 // ---------- Vista ----------
-let current = 0;
+let selected = 'all'; // 'all' o nombre de la product line
+
+const LEGEND = `<div class="legend">
+  <span><i class="sw" style="background:var(--so)"></i>Sell-out (EPOS)</span>
+  <span><i class="sw" style="background:var(--si)"></i>Sell-in (REAS)</span>
+  <span><i class="sw" style="background:var(--band-fill);outline:1.5px dashed var(--band)"></i>Zona recomendada</span>
+  <span>● Quarter &nbsp;◆ FY</span>
+  <span><i class="sw" style="background:var(--good);border-radius:50%"></i>Dentro</span>
+  <span><i class="sw" style="background:var(--warning);border-radius:50%"></i>Cerca</span>
+  <span><i class="sw" style="background:var(--critical);border-radius:50%"></i>Fuera</span>
+</div>`;
+
+function flagBadge(r) {
+  return !r.zone ? '<span class="badge na">n/d</span>' : r.flags ? `<span class="badge crit">${r.flags} fuera</span>` : '<span class="badge ok">✓</span>';
+}
+
 function render() {
   const P = params();
-  const results = DATA.lines.map((d) => analyse(d, P));
-  const tabs = document.getElementById('tabs');
-  tabs.innerHTML = results.map((r, i) => {
-    const badge = !r.zone ? '<span class="badge na">n/d</span>' : r.flags ? `<span class="badge crit">${r.flags}</span>` : '<span class="badge ok">✓</span>';
-    return `<button role="tab" aria-selected="${i === current}" data-i="${i}">${esc(r.d.name)}${badge}</button>`;
-  }).join('');
-  tabs.querySelectorAll('button').forEach((b) => b.onclick = () => { current = +b.dataset.i; render(); });
-  const r = results[current];
-  if (!r) { document.getElementById('view').innerHTML = '<div class="empty">Sin datos.</div>'; return; }
-  const d = r.d;
+  // Orden por total value, de mayor a menor
+  const results = DATA.lines.map((d) => analyse(d, P)).sort((a, b) => (b.d.total ?? -Infinity) - (a.d.total ?? -Infinity));
+  if (selected !== 'all' && !results.some((r) => r.d.name === selected)) selected = 'all';
 
+  document.getElementById('tabs').innerHTML = `<button role="tab" aria-selected="true">Product Line<span class="badge na">${results.length}</span></button>`;
+
+  const opts = [`<option value="all">Todas (${results.length}) — orden por value</option>`]
+    .concat(results.map((r, i) => `<option value="${esc(r.d.name)}" ${r.d.name === selected ? 'selected' : ''}>${i + 1}. ${esc(r.d.name)} · ${fmtNum(r.d.total)}${!r.zone ? ' · n/d' : r.flags ? ` · ${r.flags} fuera` : ' · ✓'}</option>`));
+
+  const shown = selected === 'all' ? results : results.filter((r) => r.d.name === selected);
+  document.getElementById('view').innerHTML = `
+    <div class="toolbar">
+      <label>Product line <select id="pick">${opts.join('')}</select></label>
+      ${LEGEND}
+    </div>
+    ${shown.map((r) => block(r, results.indexOf(r) + 1)).join('')}`;
+  const pick = document.getElementById('pick');
+  pick.value = selected;
+  pick.onchange = () => { selected = pick.value; render(); window.scrollTo({ top: 0 }); };
+}
+
+function block(r, rank) {
+  const d = r.d;
   const head = r.pb
     ? `<span class="pill ${r.gapType}">${GAP_LABEL[r.gapType]}</span><span class="case-code">SO${r.soDir === 'up' ? '↑' : '↓'} / SI${r.siDir === 'up' ? '↑' : '↓'}</span><span class="case-name">${r.pb.name}</span>${r.pb.worst ? '<span class="pill worst">Peor caso</span>' : ''}`
     : `<span class="pill none">Sin caso</span><span class="case-code">No suficiente info</span>`;
@@ -438,16 +477,6 @@ function render() {
   const zoneTxt = r.zone
     ? `${r.zone.lo != null ? pct(r.zone.lo) : '−∞'} a ${r.zone.hi != null ? pct(r.zone.hi) : '+∞'}${r.zone.lo == null || r.zone.hi == null ? ' (abierta)' : ''}`
     : '—';
-
-  const legend = `<div class="legend">
-    <span><i class="sw" style="background:var(--so)"></i>Sell-out (EPOS)</span>
-    <span><i class="sw" style="background:var(--si)"></i>Sell-in (REAS)</span>
-    <span><i class="sw" style="background:var(--band-fill);outline:1.5px dashed var(--band)"></i>Zona recomendada</span>
-    <span>● Quarter &nbsp;◆ FY</span>
-    <span><i class="sw" style="background:var(--good);border-radius:50%"></i>Dentro</span>
-    <span><i class="sw" style="background:var(--warning);border-radius:50%"></i>Cerca</span>
-    <span><i class="sw" style="background:var(--critical);border-radius:50%"></i>Fuera</span>
-  </div>`;
 
   const rows = r.points.map((p) => `<tr>
       <td>${p.kind === 'fy' ? '◆' : '●'} ${p.label}</td>
@@ -458,31 +487,32 @@ function render() {
 
   const warns = [...r.warnings, ...r.crossings.map((c) => ({ html: `<b>Cruce de cero:</b> ${c} — alarma temprana.` }))];
 
-  document.getElementById('view').innerHTML = `
-    <div class="panel">
-      <section class="card">
-        <div class="case-head">${head}</div>
-        <div class="kpis">
-          <div class="kpi"><div class="k">Total value</div><div class="v">${fmtNum(d.total)}</div></div>
-          <div class="kpi"><div class="k">Gap 6m (SO − SI)</div><div class="v">${r.gap != null ? (r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pp' : '—'}</div></div>
-          <div class="kpi"><div class="k">Puntos fuera de zona</div><div class="v">${r.zone ? r.flags + ' / 4' : '—'}</div></div>
-        </div>
-        ${chart(r)}
-        ${legend}
-      </section>
-      <section class="card">
-        ${r.pb ? `<div class="rows">
-          <div class="lbl">Qué pasa</div><div>${r.pb.what}</div>
-          <div class="lbl">Acción</div><div>${r.pb.action}</div>
-        </div>
-        <div class="where"><div class="lbl">Dónde poner los puntos</div><div class="txt">${r.pb.where}</div><div class="rng">Zona calculada: ${zoneTxt}</div></div>` : ''}
-        <table class="pts">
-          <thead><tr><th>Punto</th><th style="text-align:right">Forecast YoY</th><th style="text-align:right">Distancia a zona</th><th>Estado</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        ${warns.length ? `<div class="warns">${warns.map((w) => `<div class="warn ${w.crit ? 'crit' : ''}">${w.html}</div>`).join('')}</div>` : ''}
-      </section>
-    </div>`;
+  return `
+    <article class="line">
+      <h2 class="line-title"><span class="rank">${rank}</span>${esc(d.name)}<span class="line-val">Total value ${fmtNum(d.total)}</span>${flagBadge(r)}</h2>
+      <div class="panel">
+        <section class="card">
+          <div class="case-head">${head}</div>
+          <div class="kpis">
+            <div class="kpi"><div class="k">Gap 6m (SO − SI)</div><div class="v">${r.gap != null ? (r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pp' : '—'}</div></div>
+            <div class="kpi"><div class="k">Puntos fuera de zona</div><div class="v">${r.zone ? r.flags + ' / 4' : '—'}</div></div>
+          </div>
+          ${chart(r)}
+        </section>
+        <section class="card">
+          ${r.pb ? `<div class="rows">
+            <div class="lbl">Qué pasa</div><div>${r.pb.what}</div>
+            <div class="lbl">Acción</div><div>${r.pb.action}</div>
+          </div>
+          <div class="where"><div class="lbl">Dónde poner los puntos</div><div class="txt">${r.pb.where}</div><div class="rng">Zona calculada: ${zoneTxt}</div></div>` : ''}
+          <table class="pts">
+            <thead><tr><th>Punto</th><th style="text-align:right">Forecast YoY</th><th style="text-align:right">Distancia a zona</th><th>Estado</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${warns.length ? `<div class="warns">${warns.map((w) => `<div class="warn ${w.crit ? 'crit' : ''}">${w.html}</div>`).join('')}</div>` : ''}
+        </section>
+      </div>
+    </article>`;
 }
 
 // ---------- Tooltip ----------
@@ -505,7 +535,7 @@ document.getElementById('file').addEventListener('change', async (e) => {
     const sheetName = wb.SheetNames.find((n) => n.trim().toUpperCase() === 'AFTER') || wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true });
     DATA = parseRows(rows, `${f.name} · pestaña ${sheetName}`);
-    current = 0;
+    selected = 'all';
     document.getElementById('fileName').textContent = DATA.source;
     render();
   } catch (err) {
