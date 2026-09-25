@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trend Check</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --surface-1: #fcfcfb;
+  --surface-2: #ffffff;
+  --border: #e3e2de;
+  --grid: #ebeae6;
+  --axis: #8a8984;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --so: #2a78d6;          /* sell-out, azul */
+  --si: #eb6834;          /* sell-in, naranja */
+  --band: #1f9d55;
+  --band-fill: rgba(31, 157, 85, 0.13);
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --na: #9a9994;
+  --accent-soft: #e9f5ee;
+  --warn-soft: #fff6e0;
+  --crit-soft: #fcebea;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --border: #34342f;
+    --grid: #2b2b28;
+    --axis: #8f8e87;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --so: #3987e5;
+    --si: #d95926;
+    --band: #3fbf73;
+    --band-fill: rgba(63, 191, 115, 0.16);
+    --na: #77766f;
+    --accent-soft: #17291f;
+    --warn-soft: #2d2512;
+    --crit-soft: #2e1717;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #222220;
+  --border: #34342f;
+  --grid: #2b2b28;
+  --axis: #8f8e87;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #9a998f;
+  --so: #3987e5;
+  --si: #d95926;
+  --band: #3fbf73;
+  --band-fill: rgba(63, 191, 115, 0.16);
+  --na: #77766f;
+  --accent-soft: #17291f;
+  --warn-soft: #2d2512;
+  --crit-soft: #2e1717;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+h1 small { font-weight: 400; color: var(--text-secondary); font-size: 14px; margin-left: 6px; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button, .btn {
+  font: inherit; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer;
+}
+button:hover, .btn:hover { border-color: var(--axis); }
+.btn-primary { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+.source { color: var(--text-muted); font-size: 12px; }
+
+.disclaimer {
+  margin: 14px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--surface-2);
+  border: 1px solid var(--border); color: var(--text-secondary); font-size: 13px;
+}
+
+details.params { margin-top: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+details.params summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+.param-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 18px; margin-top: 10px; }
+.param-grid label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-secondary); gap: 4px; }
+.param-grid input { font: inherit; width: 90px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); }
+
+nav.tabs { display: flex; gap: 4px; margin-top: 18px; overflow-x: auto; border-bottom: 1px solid var(--border); }
+nav.tabs button {
+  border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+  padding: 10px 12px; white-space: nowrap; color: var(--text-secondary);
+}
+nav.tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--text-primary); font-weight: 600; }
+.badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px; font-size: 11px; line-height: 18px; text-align: center; font-weight: 600; }
+.badge.crit { background: var(--crit-soft); color: var(--critical); }
+.badge.ok { background: var(--accent-soft); color: var(--good); }
+.badge.na { background: var(--surface-1); color: var(--text-muted); border: 1px solid var(--border); }
+
+.panel { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .panel { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+
+.case-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; color: #fff; }
+.pill.dep { background: #c0392b; }
+.pill.eq { background: #5a6b7b; }
+.pill.over { background: #7b4bb3; }
+.pill.none { background: var(--na); }
+.pill.worst { background: transparent; color: var(--critical); border: 1px solid var(--critical); }
+.case-code { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.case-name { font-style: italic; color: var(--text-secondary); font-size: 16px; }
+
+.kpis { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 10px 0 6px; }
+.kpi .k { font-size: 12px; color: var(--text-muted); }
+.kpi .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart text { font-family: inherit; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+
+.rows { display: grid; grid-template-columns: 130px 1fr; border-top: 1px solid var(--border); }
+.rows > div { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.rows .lbl { color: var(--text-secondary); font-weight: 600; font-size: 13px; padding-right: 10px; }
+.where { margin-top: 12px; background: var(--accent-soft); border-left: 3px solid var(--band); border-radius: 8px; padding: 10px 12px; }
+.where .lbl { color: var(--band); font-weight: 600; font-size: 13px; }
+.where .txt { font-weight: 600; margin-top: 2px; }
+.where .rng { color: var(--text-secondary); font-size: 13px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+table.pts { width: 100%; border-collapse: collapse; margin-top: 14px; font-variant-numeric: tabular-nums; font-size: 13px; }
+table.pts th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+table.pts td { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+table.pts td.num { text-align: right; }
+.st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.st.in { color: var(--good); } .st.near { color: #b07800; } .st.out { color: var(--critical); } .st.na { color: var(--text-muted); }
+:root[data-theme="dark"] .st.near { color: var(--warning); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .st.near { color: var(--warning); } }
+
+.warns { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.warn { font-size: 13px; padding: 7px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--text-primary); }
+.warn.crit { background: var(--crit-soft); }
+.warn b { font-weight: 600; }
+
+.tip {
+  position: fixed; pointer-events: none; z-index: 10; background: var(--surface-2); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  opacity: 0; transition: opacity .08s; max-width: 260px; font-variant-numeric: tabular-nums;
+}
+.empty { padding: 40px; text-align: center; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Trend Check <small id="fileName">FLORA · pestaña AFTER</small></h1>
+    <div class="controls">
+      <label class="btn btn-primary" for="file">Cargar Excel…</label>
+      <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
+      <button id="themeBtn" type="button" title="Cambiar tema">◐</button>
+    </div>
+  </header>
+  <p class="disclaimer">⚑ <b>Dónde mirar, no un veredicto.</b> Que un punto salga de la zona verde significa <i>investígalo</i>, no <i>está mal</i>. Flechas = tendencia pasada YoY en unidades (base 12m → punta 6m). Puntos = forecast de sell-in (REAS) YoY.</p>
+
+  <details class="params">
+    <summary>Parámetros del motor (prototipo — ajustables)</summary>
+    <div class="param-grid">
+      <label>Umbral de equilibrio SO≈SI (pp)<input type="number" step="0.5" id="pEq" value="5"></label>
+      <label>Semiancho de la zona (pp)<input type="number" step="0.5" id="pB" value="3"></label>
+      <label>Holgura quarters antes de flag (pp)<input type="number" step="0.5" id="pSlackQ" value="5"></label>
+      <label>Holgura FY antes de flag (pp)<input type="number" step="0.5" id="pSlackFY" value="2"></label>
+      <label>Aviso de base baja si |YoY| ≥ (%)<input type="number" step="5" id="pLow" value="100"></label>
+    </div>
+  </details>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div id="view"></div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+/*__SHEETJS__*/
+</script>
+<script>
+// Datos embebidos: FLORA.xlsx, pestaña AFTER. Q2/Q3/Q4/FY usan la primera de las dos columnas.
+let DATA = {
+  source: 'FLORA · pestaña AFTER',
+  fyLabel: 'FY27',
+  lines: [
+    { name: 'Gorgeous Gardenia', total: 17432.942390063476, so6: -0.07368997339979676, so12: -0.12019396718081696, si6: 0.08297828444341504, si12: 0.05333487083915256, q2: 0.010554192388360528, q3: -0.2009896462139501, q4: -0.1070881861174715, fy: -0.1819209419897858 },
+    { name: 'Flora Gorgeous Jasmine', total: 3053.2086330737675, so6: -0.29680740937285244, so12: -0.23028093492489943, si6: -0.4323137759193494, si12: 0.03979552503567274, q2: -0.5883843560943421, q3: -0.0048506293834643666, q4: -0.10773562665538616, fy: -0.42343059548307416 },
+    { name: 'Gucci Flora Gorgeous Magnolia', total: 7601.294970204162, so6: 0.10839605324711662, so12: -0.2479754383485557, si6: 0.6843722785476489, si12: 0.13871824746287387, q2: 0.1865671927456416, q3: 0.1038610175375505, q4: -0.09839027198572814, fy: 0.26966114609312575 },
+    { name: 'Gucci Flora Gorgeous Orchid', total: 7889.584220916393, so6: -0.3117285877338901, so12: -0.3838050086904393, si6: 0.36582978847616676, si12: 1.8480469230584617, q2: 0.018360699272045977, q3: -0.08487018279664049, q4: -0.17632375222376306, fy: -0.21037508736075416 },
+    { name: 'Gucci Flora Gorgeous Gardenia Intense', total: 5050.97188170434, so6: 0.11785806459551204, so12: 1.7906240254929975, si6: 0, si12: 0, q2: 0, q3: 0, q4: 0.011324321503916712, fy: 3.5922919240754485 },
+  ]
+};
+
+// ---------- Playbook: 12 casos (gap × trayectoria SO/SI) ----------
+// Cada caso devuelve la zona recomendada para los puntos de sell-in.
+// so/si = punta 6m; gap = so − si; b = semiancho. lo/hi = null → zona abierta por ese lado.
+const PLAYBOOK = {
+  dep: {
+    'up/down':   { name: 'Depleción acelerando', worst: true, what: 'La demanda sube mientras los envíos caen. El gap se abre a toda velocidad: máximo riesgo de rotura.', action: 'Acelerar reposición y proteger supply.', where: 'En o por encima del sell-out (abierta arriba). Nunca seguir al sell-in hundido.', zone: (so, si, g, b) => ({ lo: so, hi: null }) },
+    'up/up':     { name: 'Demanda sube, envíos persiguen', what: 'Ambos suben, pero el sell-in va por debajo del sell-out intentando alcanzarlo. Probable falta si no mantiene el ritmo.', action: 'Empujar el sell-in al ritmo de la demanda.', where: 'En el sell-out, con sesgo ligeramente arriba para cerrar el gap.', zone: (so, si, g, b) => ({ lo: so - b / 2, hi: so + 1.5 * b }) },
+    'down/down': { name: 'Ambos enfrían, aún corto', what: 'Demanda y envíos bajan, pero sigues infra-abastecido. El riesgo es real pero decreciente.', action: 'Suavizar envíos; no cortarlos.', where: 'Entre las dos flechas, bajando pero por encima del sell-in.', zone: (so, si, g, b) => ({ lo: si + g / 4, hi: so }) },
+    'down/up':   { name: 'Auto-corrección', what: 'La demanda enfría mientras los envíos se recuperan: el gap se cierra solo.', action: 'Dejar que converja; no pasarse a sobre-stock.', where: 'En el punto de convergencia, rango medio.', zone: (so, si, g, b) => ({ lo: (so + si) / 2 - b, hi: (so + si) / 2 + b }) },
+  },
+  eq: {
+    'up/up':     { name: 'Expansión sana', what: 'Ambos crecen en sincronía. Crecimiento limpio y equilibrado.', action: 'Acompañarlo. No hace falta corregir.', where: 'Arriba, en línea con ambas flechas.', zone: (so, si, g, b) => ({ lo: Math.min(so, si), hi: Math.max(so, si) + b }) },
+    'down/down': { name: 'Declive gestionado', what: 'Ambos bajan juntos. Bien si es un wind-down intencionado; alarma si no.', action: 'Confirmar que es intencionado; si no, investigar la demanda.', where: 'Abajo, en línea con ambas flechas.', zone: (so, si, g, b) => ({ lo: Math.min(so, si) - b, hi: Math.max(so, si) }) },
+    'up/down':   { name: 'Depleción formándose', what: 'Nivelados hoy, pero la demanda gira arriba y los envíos abajo. Está naciendo una rotura.', action: 'Adelantarse y prevenir la rotura.', where: 'Sesgo arriba hacia el sell-out, pronto.', zone: (so, si, g, b) => ({ lo: (so + si) / 2, hi: so + b }) },
+    'down/up':   { name: 'Sobre-stock formándose', what: 'Nivelados hoy, pero la demanda gira abajo y los envíos arriba. Está naciendo un sobre-stock.', action: 'Frenar la acumulación pronto.', where: 'Sesgo abajo hacia el sell-out, pronto.', zone: (so, si, g, b) => ({ lo: so - b, hi: (so + si) / 2 }) },
+  },
+  over: {
+    'down/up':   { name: 'Sobre-stock acelerando', worst: true, what: 'La demanda cae mientras se sigue enviando más. El gap se abre rápido en la dirección equivocada.', action: 'Cortar la acumulación ya.', where: 'Abajo, hasta el sell-out (abierta abajo).', zone: (so, si, g, b) => ({ lo: null, hi: so }) },
+    'down/down': { name: 'Envíos enfriando hacia la demanda', what: 'Todavía sobre-envías, pero el sell-in está bajando hacia una demanda que se ablanda. Corrigiendo.', action: 'Seguir recortando y vigilar la convergencia.', where: 'Bajo, tendiendo al sell-out.', zone: (so, si, g, b) => ({ lo: so - b, hi: so - g / 4 }) },
+    'up/up':     { name: 'Demanda sube hacia los envíos', what: 'Sobre-enviaste, pero la demanda sube hacia el nivel de envíos, así que se resuelve sola.', action: 'No cortar; dejar que la demanda cierre el gap.', where: 'Arriba; el gap se cierra por el lado de la demanda.', zone: (so, si, g, b) => ({ lo: so - g / 4, hi: si }) },
+    'up/down':   { name: 'Convergiendo rápido', what: 'Demanda sube, envíos bajan. El gap se cierra rápido y puede voltear a depleción.', action: 'Mantener, listo para reponer si voltea.', where: 'En la convergencia; vigilar el flip.', zone: (so, si, g, b) => ({ lo: (so + si) / 2 - b, hi: (so + si) / 2 + b }) },
+  },
+};
+const GAP_LABEL = { dep: 'Depleción', eq: 'Equilibrio', over: 'Sobre-stock' };
+
+// ---------- Parámetros ----------
+function params() {
+  const n = (id) => parseFloat(document.getElementById(id).value) / 100;
+  return { eq: n('pEq'), b: n('pB'), slackQ: n('pSlackQ'), slackFY: n('pSlackFY'), low: n('pLow') };
+}
+
+// ---------- Motor ----------
+function analyse(d, P) {
+  const r = { d, warnings: [], crossings: [] };
+  const noSI = d.si6 === 0 && d.si12 === 0;
+  const noSO = d.so6 === 0 && d.so12 === 0;
+  const nums = [d.so6, d.so12, d.si6, d.si12];
+  if (nums.some((v) => v == null || isNaN(v)) || noSI || noSO) {
+    r.caseKey = null;
+    r.warnings.push({ crit: true, html: `<b>No suficiente info.</b> ${noSI ? 'REAS 6m y 12m = 0 exacto: parece que no hay historia de sell-in comparable.' : noSO ? 'EPOS 6m y 12m = 0 exacto: parece que no hay historia de sell-out comparable.' : 'Faltan tendencias.'} Sin las dos flechas no hay gap ni zona recomendada — subir a familia/segmento.` });
+  } else {
+    r.soDir = d.so6 >= d.so12 ? 'up' : 'down';
+    r.siDir = d.si6 >= d.si12 ? 'up' : 'down';
+    r.gap = d.so6 - d.si6;
+    r.gapType = r.gap > P.eq ? 'dep' : r.gap < -P.eq ? 'over' : 'eq';
+    r.caseKey = `${r.soDir}/${r.siDir}`;
+    r.pb = PLAYBOOK[r.gapType][r.caseKey];
+    r.zone = r.pb.zone(d.so6, d.si6, r.gap, P.b);
+  }
+  for (const [lbl, a, b] of [['SO', d.so12, d.so6], ['SI', d.si12, d.si6]]) {
+    if (a < 0 && b > 0) r.crossings.push(`${lbl} turnaround (cruza a positivo)`);
+    if (a > 0 && b < 0) r.crossings.push(`${lbl} rollover (cruza a negativo)`);
+  }
+  const big = [['EPOS 6m', d.so6], ['EPOS 12m', d.so12], ['REAS 6m', d.si6], ['REAS 12m', d.si12]].filter(([, v]) => Math.abs(v) >= P.low);
+  if (big.length) r.warnings.push({ html: `<b>Base baja probable:</b> ${big.map(([k, v]) => `${k} ${pct(v)}`).join(', ')}. Fíate de la dirección, no del nivel; dimensiona con la familia.` });
+
+  r.points = [['Q2', d.q2, 'q'], ['Q3', d.q3, 'q'], ['Q4', d.q4, 'q'], [DATA.fyLabel || 'FY', d.fy, 'fy']].map(([label, v, kind]) => {
+    const p = { label, v, kind, status: 'na', dist: null };
+    if (v == null || isNaN(v)) return p;
+    if (!r.zone) return p;
+    const { lo, hi } = r.zone;
+    const dist = lo != null && v < lo ? lo - v : hi != null && v > hi ? v - hi : 0;
+    p.dist = dist;
+    p.dir = lo != null && v < lo ? 'debajo' : hi != null && v > hi ? 'encima' : '';
+    const slack = kind === 'fy' ? P.slackFY : P.slackQ;
+    p.status = dist === 0 ? 'in' : dist <= slack ? 'near' : 'out';
+    return p;
+  });
+  const zeros = r.points.filter((p) => p.v === 0).map((p) => p.label);
+  if (zeros.length) r.warnings.push({ html: `<b>Forecast 0% exacto</b> en ${zeros.join(', ')}: ¿dato vacío o forecast plano?` });
+  r.flags = r.points.filter((p) => p.status === 'out').length;
+  return r;
+}
+
+// ---------- Formato ----------
+function pct(v, dp = 0) {
+  if (v == null || isNaN(v)) return '—';
+  const x = v * 100;
+  const s = Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(dp || (Math.abs(x) < 10 ? 1 : 0));
+  return (x > 0 ? '+' : x < 0 ? '−' : '') + s.replace('-', '') + '%';
+}
+const fmtNum = (v) => v == null ? '—' : Math.round(v).toLocaleString('en-US');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const STATUS = { in: ['✓', 'Dentro'], near: ['!', 'Cerca'], out: ['✕', 'Fuera'], na: ['–', 'Sin zona'] };
+const STATUS_COLOR = { in: 'var(--good)', near: 'var(--warning)', out: 'var(--critical)', na: 'var(--na)' };
+
+// ---------- Gráfico SVG ----------
+function chart(r) {
+  const d = r.d;
+  const W = 660, H = 420, L = 56, R = 16, T = 22, B = 44;
+  const X = { so: 110, si: 220, q2: 345, q3: 425, q4: 505, fy: 600 };
+  const CAP_HI = 1.0, CAP_LO = -1.0;
+  const vals = [0, d.so6, d.so12, d.si6, d.si12, ...r.points.map((p) => p.v)];
+  if (r.zone) { if (r.zone.lo != null) vals.push(r.zone.lo); if (r.zone.hi != null) vals.push(r.zone.hi); }
+  const finite = vals.filter((v) => v != null && !isNaN(v));
+  let min = Math.max(CAP_LO, Math.min(...finite)), max = Math.min(CAP_HI, Math.max(...finite));
+  const span = Math.max(max - min, 0.2);
+  const pad = span * 0.12;
+  min -= pad; max += pad;
+  const step = niceStep((max - min) / 6);
+  min = Math.floor(min / step) * step; max = Math.ceil(max / step) * step;
+  const y = (v) => T + (max - Math.max(min, Math.min(max, v))) / (max - min) * (H - T - B);
+  const clipped = (v) => v > max ? 'hi' : v < min ? 'lo' : '';
+
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tendencias y forecast de ${esc(d.name)}">`;
+  s += `<defs>
+    <linearGradient id="fadeUp" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--band)" stop-opacity=".2"/><stop offset="1" stop-color="var(--band)" stop-opacity="0"/></linearGradient>
+    <linearGradient id="fadeDown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--band)" stop-opacity=".2"/><stop offset="1" stop-color="var(--band)" stop-opacity="0"/></linearGradient>
+  </defs>`;
+  // grid
+  for (let t = min; t <= max + 1e-9; t += step) {
+    const yy = y(t);
+    const zero = Math.abs(t) < 1e-9;
+    s += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="${zero ? 'var(--axis)' : 'var(--grid)'}" stroke-width="1" ${zero ? 'stroke-dasharray="5 4"' : ''}/>`;
+    s += `<text x="${L - 8}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--text-muted)">${tick(t)}</text>`;
+  }
+  // divisor pasado | forecast
+  s += `<line x1="282" x2="282" y1="${T - 6}" y2="${H - B + 6}" stroke="var(--border)" stroke-width="1"/>`;
+  s += `<text x="165" y="${T - 8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">TENDENCIA (pasado)</text>`;
+  s += `<text x="${(282 + W - R) / 2}" y="${T - 8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">FORECAST SELL-IN (futuro)</text>`;
+
+  // zona verde
+  if (r.zone) {
+    const { lo, hi } = r.zone;
+    const x0 = L, x1 = W - R;
+    if (lo != null && hi != null) {
+      s += `<rect x="${x0}" y="${y(hi)}" width="${x1 - x0}" height="${Math.max(2, y(lo) - y(hi))}" fill="var(--band-fill)"/>`;
+      s += `<line x1="${x0}" x2="${x1}" y1="${y(hi)}" y2="${y(hi)}" stroke="var(--band)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+      s += `<line x1="${x0}" x2="${x1}" y1="${y(lo)}" y2="${y(lo)}" stroke="var(--band)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    } else if (lo != null) {
+      s += `<rect x="${x0}" y="${T}" width="${x1 - x0}" height="${Math.max(0, y(lo) - T)}" fill="url(#fadeUp)"/>`;
+      s += `<line x1="${x0}" x2="${x1}" y1="${y(lo)}" y2="${y(lo)}" stroke="var(--band)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    } else if (hi != null) {
+      s += `<rect x="${x0}" y="${y(hi)}" width="${x1 - x0}" height="${Math.max(0, H - B - y(hi))}" fill="url(#fadeDown)"/>`;
+      s += `<line x1="${x0}" x2="${x1}" y1="${y(hi)}" y2="${y(hi)}" stroke="var(--band)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    }
+  }
+
+  if (d.si6 === 0 && d.si12 === 0) s += `<text x="${X.si}" y="${y(0) - 8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">sin datos</text>`;
+  else s += arrow(X.si, d.si12, d.si6, 'var(--si)', 'Sell-in (REAS)', y, clipped);
+  if (d.so6 === 0 && d.so12 === 0) s += `<text x="${X.so}" y="${y(0) - 8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">sin datos</text>`;
+  else s += arrow(X.so, d.so12, d.so6, 'var(--so)', 'Sell-out (EPOS)', y, clipped);
+
+  // puntos forecast
+  for (const p of r.points) {
+    const x = X[p.label === 'Q2' ? 'q2' : p.label === 'Q3' ? 'q3' : p.label === 'Q4' ? 'q4' : 'fy'];
+    if (p.v == null || isNaN(p.v)) continue;
+    const yy = y(p.v), c = STATUS_COLOR[p.status], cl = clipped(p.v);
+    const tip = `<b>${p.label}</b> forecast sell-in ${pct(p.v)}<br>${STATUS[p.status][1]}${p.dist ? ` · ${(p.dist * 100).toFixed(1)} pp por ${p.dir}` : ''}`;
+    s += `<g data-tip="${esc(tip)}" style="cursor:default">`;
+    s += `<rect x="${x - 30}" y="${yy - 20}" width="60" height="40" fill="transparent"/>`;
+    if (p.kind === 'fy') {
+      const k = 11;
+      s += `<path d="M${x} ${yy - k} L${x + k} ${yy} L${x} ${yy + k} L${x - k} ${yy} Z" fill="${c}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    } else {
+      s += `<circle cx="${x}" cy="${yy}" r="7.5" fill="${c}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    }
+    const ly = cl === 'hi' ? yy + 26 : cl === 'lo' ? yy - 18 : yy + 4;
+    const lx = cl ? x : x + 15;
+    s += `<text x="${lx}" y="${ly}" text-anchor="${cl ? 'middle' : 'start'}" font-size="11.5" font-weight="600" fill="var(--text-primary)">${cl === 'hi' ? '▲ ' : cl === 'lo' ? '▼ ' : ''}${pct(p.v)}</text>`;
+    s += `</g>`;
+    s += `<text x="${x}" y="${H - B + 22}" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--text-primary)">${p.label}</text>`;
+  }
+  s += `<text x="${X.so}" y="${H - B + 22}" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--text-primary)">SO</text>`;
+  s += `<text x="${X.si}" y="${H - B + 22}" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--text-primary)">SI</text>`;
+  s += `<text x="${X.so}" y="${H - B + 37}" text-anchor="middle" font-size="10.5" fill="var(--text-muted)">EPOS</text>`;
+  s += `<text x="${X.si}" y="${H - B + 37}" text-anchor="middle" font-size="10.5" fill="var(--text-muted)">REAS</text>`;
+  s += `</svg>`;
+  return s;
+}
+
+function arrow(x, v12, v6, color, name, y, clipped) {
+  const y0 = y(v12), y1 = y(v6);
+  const len = Math.abs(y1 - y0);
+  const dir = y1 < y0 ? -1 : 1; // -1 = apunta arriba
+  const sw = 9, hw = 20;
+  const tip = `<b>${name}</b><br>12m ${pct(v12)} → 6m ${pct(v6)}<br>${v6 >= v12 ? 'Acelerando ↑' : 'Frenando ↓'} (${((v6 - v12) * 100).toFixed(1)} pp)`;
+  let s = `<g data-tip="${esc(tip)}"><rect x="${x - 34}" y="${Math.min(y0, y1) - 14}" width="68" height="${len + 28}" fill="transparent"/>`;
+  s += `<rect x="${x - hw}" y="${y0 - 1.5}" width="${hw * 2}" height="3" rx="1.5" fill="${color}"/>`; // base 12m
+  if (len < 5) {
+    s += `<rect x="${x - hw}" y="${y1 - 4}" width="${hw * 2}" height="8" rx="3" fill="${color}"/>`;
+  } else {
+    const hl = Math.min(18, len * 0.6);
+    const yNeck = y1 - dir * hl;
+    s += `<path d="M${x - sw} ${y0} L${x - sw} ${yNeck} L${x - hw} ${yNeck} L${x} ${y1} L${x + hw} ${yNeck} L${x + sw} ${yNeck} L${x + sw} ${y0} Z" fill="${color}"/>`;
+  }
+  const c12 = clipped(v12), c6 = clipped(v6);
+  const lab = (yy, txt, c, strong) => `<text x="${x + hw + 5}" y="${yy + 4}" font-size="11" ${strong ? 'font-weight="600" fill="var(--text-primary)"' : 'fill="var(--text-secondary)"'}>${txt}${c === 'hi' ? ' ▲' : c === 'lo' ? ' ▼' : ''}</text>`;
+  let yl6 = y1, yl12 = y0;
+  if (Math.abs(yl6 - yl12) < 14) { if (dir < 0) { yl6 -= 7; yl12 += 7; } else { yl6 += 7; yl12 -= 7; } }
+  s += lab(yl6, `6m ${pct(v6)}`, c6, true);
+  s += lab(yl12, `12m ${pct(v12)}`, c12, false);
+  return s + '</g>';
+}
+
+function tick(t) {
+  const x = Math.round(t * 1000) / 10;
+  return x === 0 ? '0%' : (x > 0 ? '+' : '−') + Math.abs(x) + '%';
+}
+
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+
+// ---------- Vista ----------
+let current = 0;
+function render() {
+  const P = params();
+  const results = DATA.lines.map((d) => analyse(d, P));
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = results.map((r, i) => {
+    const badge = !r.zone ? '<span class="badge na">n/d</span>' : r.flags ? `<span class="badge crit">${r.flags}</span>` : '<span class="badge ok">✓</span>';
+    return `<button role="tab" aria-selected="${i === current}" data-i="${i}">${esc(r.d.name)}${badge}</button>`;
+  }).join('');
+  tabs.querySelectorAll('button').forEach((b) => b.onclick = () => { current = +b.dataset.i; render(); });
+  const r = results[current];
+  if (!r) { document.getElementById('view').innerHTML = '<div class="empty">Sin datos.</div>'; return; }
+  const d = r.d;
+
+  const head = r.pb
+    ? `<span class="pill ${r.gapType}">${GAP_LABEL[r.gapType]}</span><span class="case-code">SO${r.soDir === 'up' ? '↑' : '↓'} / SI${r.siDir === 'up' ? '↑' : '↓'}</span><span class="case-name">${r.pb.name}</span>${r.pb.worst ? '<span class="pill worst">Peor caso</span>' : ''}`
+    : `<span class="pill none">Sin caso</span><span class="case-code">No suficiente info</span>`;
+
+  const zoneTxt = r.zone
+    ? `${r.zone.lo != null ? pct(r.zone.lo) : '−∞'} a ${r.zone.hi != null ? pct(r.zone.hi) : '+∞'}${r.zone.lo == null || r.zone.hi == null ? ' (abierta)' : ''}`
+    : '—';
+
+  const legend = `<div class="legend">
+    <span><i class="sw" style="background:var(--so)"></i>Sell-out (EPOS)</span>
+    <span><i class="sw" style="background:var(--si)"></i>Sell-in (REAS)</span>
+    <span><i class="sw" style="background:var(--band-fill);outline:1.5px dashed var(--band)"></i>Zona recomendada</span>
+    <span>● Quarter &nbsp;◆ FY</span>
+    <span><i class="sw" style="background:var(--good);border-radius:50%"></i>Dentro</span>
+    <span><i class="sw" style="background:var(--warning);border-radius:50%"></i>Cerca</span>
+    <span><i class="sw" style="background:var(--critical);border-radius:50%"></i>Fuera</span>
+  </div>`;
+
+  const rows = r.points.map((p) => `<tr>
+      <td>${p.kind === 'fy' ? '◆' : '●'} ${p.label}</td>
+      <td class="num">${pct(p.v)}</td>
+      <td class="num">${p.dist ? (p.dist * 100).toFixed(1) + ' pp ' + p.dir : p.status === 'na' ? '—' : '0'}</td>
+      <td><span class="st ${p.status}">${STATUS[p.status][0]} ${STATUS[p.status][1]}</span></td>
+    </tr>`).join('');
+
+  const warns = [...r.warnings, ...r.crossings.map((c) => ({ html: `<b>Cruce de cero:</b> ${c} — alarma temprana.` }))];
+
+  document.getElementById('view').innerHTML = `
+    <div class="panel">
+      <section class="card">
+        <div class="case-head">${head}</div>
+        <div class="kpis">
+          <div class="kpi"><div class="k">Total value</div><div class="v">${fmtNum(d.total)}</div></div>
+          <div class="kpi"><div class="k">Gap 6m (SO − SI)</div><div class="v">${r.gap != null ? (r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pp' : '—'}</div></div>
+          <div class="kpi"><div class="k">Puntos fuera de zona</div><div class="v">${r.zone ? r.flags + ' / 4' : '—'}</div></div>
+        </div>
+        ${chart(r)}
+        ${legend}
+      </section>
+      <section class="card">
+        ${r.pb ? `<div class="rows">
+          <div class="lbl">Qué pasa</div><div>${r.pb.what}</div>
+          <div class="lbl">Acción</div><div>${r.pb.action}</div>
+        </div>
+        <div class="where"><div class="lbl">Dónde poner los puntos</div><div class="txt">${r.pb.where}</div><div class="rng">Zona calculada: ${zoneTxt}</div></div>` : ''}
+        <table class="pts">
+          <thead><tr><th>Punto</th><th style="text-align:right">Forecast YoY</th><th style="text-align:right">Distancia a zona</th><th>Estado</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${warns.length ? `<div class="warns">${warns.map((w) => `<div class="warn ${w.crit ? 'crit' : ''}">${w.html}</div>`).join('')}</div>` : ''}
+      </section>
+    </div>`;
+}
+
+// ---------- Tooltip ----------
+const tipEl = document.getElementById('tip');
+document.addEventListener('mousemove', (e) => {
+  const g = e.target.closest && e.target.closest('[data-tip]');
+  if (!g) { tipEl.style.opacity = 0; return; }
+  tipEl.innerHTML = g.getAttribute('data-tip');
+  const x = Math.min(e.clientX + 14, window.innerWidth - tipEl.offsetWidth - 8);
+  tipEl.style.left = x + 'px'; tipEl.style.top = (e.clientY + 14) + 'px'; tipEl.style.opacity = 1;
+});
+
+// ---------- Carga de Excel (SheetJS embebido) ----------
+document.getElementById('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    if (typeof XLSX === 'undefined') throw new Error('SheetJS no está embebido en este HTML.');
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+    const sheetName = wb.SheetNames.find((n) => n.trim().toUpperCase() === 'AFTER') || wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true });
+    DATA = parseRows(rows, `${f.name} · pestaña ${sheetName}`);
+    current = 0;
+    document.getElementById('fileName').textContent = DATA.source;
+    render();
+  } catch (err) {
+    alert('No se pudo leer el Excel: ' + err.message);
+  }
+});
+
+function parseRows(rows, source) {
+  const hdr = (rows[0] || []).map((h) => String(h ?? '').trim().toUpperCase());
+  const col = (test) => hdr.findIndex(test);
+  const idx = {
+    name: col((h) => h.startsWith('PRODUCT LINE')),
+    total: col((h) => h === 'TOTAL VALUE'),
+    so6: col((h) => h === 'EPOS 6M'), so12: col((h) => h === 'EPOS 12M'),
+    si6: col((h) => h === 'REAS 6M'), si12: col((h) => h === 'REAS 12M'),
+    q2: col((h) => h === 'Q2'), q3: col((h) => h === 'Q3'), q4: col((h) => h === 'Q4'),
+    fy: col((h) => /^FY/.test(h)),
+  };
+  const missing = Object.entries(idx).filter(([, i]) => i < 0).map(([k]) => k);
+  if (missing.length) throw new Error('Faltan columnas: ' + missing.join(', '));
+  const num = (v) => (v === '' || v == null ? null : Number(v));
+  const lines = rows.slice(1).filter((r) => r && r[idx.name] != null && String(r[idx.name]).trim() !== '').map((r) => ({
+    name: String(r[idx.name]).trim(), total: num(r[idx.total]),
+    so6: num(r[idx.so6]), so12: num(r[idx.so12]), si6: num(r[idx.si6]), si12: num(r[idx.si12]),
+    q2: num(r[idx.q2]), q3: num(r[idx.q3]), q4: num(r[idx.q4]), fy: num(r[idx.fy]),
+  }));
+  if (!lines.length) throw new Error('No hay filas de product line.');
+  return { source, fyLabel: String(rows[0][idx.fy]).trim(), lines };
+}
+
+// ---------- Tema ----------
+document.getElementById('themeBtn').onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('trendTheme', root.dataset.theme); } catch (_) {}
+};
+try { const t = localStorage.getItem('trendTheme'); if (t) document.documentElement.dataset.theme = t; } catch (_) {}
+
+['pEq', 'pB', 'pSlackQ', 'pSlackFY', 'pLow'].forEach((id) => document.getElementById(id).addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
